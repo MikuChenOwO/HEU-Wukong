@@ -208,11 +208,6 @@ function handleSaveInterface(row) {
         </el-tab-pane>
 
         <el-tab-pane label="外部接口配置" name="interfaces">
-          <div class="section-card inner-card matrix-source-card">
-            <strong>当前补齐情况</strong>
-            <p>你刚才问的“管理员用户外部接口配置”之前确实还没有，这次已经补成独立配置页，后续可以继续接真实接口。</p>
-          </div>
-
           <div class="interface-grid">
             <div v-for="row in interfaceRows" :key="row.id" class="section-card interface-card">
               <div class="panel-title">
