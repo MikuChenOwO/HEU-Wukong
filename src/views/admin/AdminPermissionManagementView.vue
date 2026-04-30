@@ -172,11 +172,6 @@ function handleSaveInterface(row) {
         </el-tab-pane>
 
         <el-tab-pane label="权限矩阵" name="matrix">
-          <div class="section-card inner-card matrix-source-card">
-            <strong>权限来源</strong>
-            <p>已读取项目根目录中的《权限管理.xlsx》，并按“供应商 / 采购审核员 / 系统管理员”三类角色整理成页面展示。</p>
-          </div>
-
           <div class="permission-section-list">
             <div v-for="section in permissionSections" :key="section.id" class="section-card inner-card">
               <div class="panel-title">
