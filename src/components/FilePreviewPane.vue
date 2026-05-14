@@ -80,6 +80,9 @@ async function fullScreen() {
 <style scoped>
 .preview-panel {
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .preview-toolbar {
@@ -100,7 +103,8 @@ async function fullScreen() {
 }
 
 .preview-stage {
-  min-height: 420px;
+  flex: 1;
+  min-height: 560px;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -113,7 +117,7 @@ async function fullScreen() {
 .image-frame {
   width: 100%;
   max-width: 760px;
-  height: 460px;
+  height: 100%;
   border: none;
   border-radius: 14px;
   background: white;
@@ -124,6 +128,21 @@ async function fullScreen() {
   object-fit: contain;
 }
 
+.preview-panel:fullscreen {
+  padding: 24px;
+  background: var(--bg-card);
+}
+
+.preview-panel:fullscreen .preview-stage {
+  min-height: calc(100vh - 132px);
+}
+
+.preview-panel:fullscreen .pdf-frame,
+.preview-panel:fullscreen .image-frame {
+  max-width: min(1100px, 96vw);
+  height: calc(100vh - 180px);
+}
+
 @media (max-width: 1024px) {
   .preview-toolbar {
     flex-direction: column;
@@ -131,7 +150,7 @@ async function fullScreen() {
 
   .pdf-frame,
   .image-frame {
-    height: 380px;
+    height: 460px;
   }
 }
 </style>

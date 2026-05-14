@@ -10,8 +10,8 @@ const authStore = useAuthStore()
 const formRef = ref(null)
 const loading = ref(false)
 const form = reactive({
-  account: 'admin',
-  password: 'admin123',
+  account: 'zhoulan',
+  password: 'audit12345',
 })
 
 const rules = {
@@ -58,7 +58,7 @@ async function handleLogin() {
           type="info"
           :closable="false"
           style="margin-bottom: 16px"
-          title="测试账号：admin / admin123（采购 / 审核员）；sysadmin / sysadmin123（系统管理员）"
+          title="测试账号：zhoulan / audit12345、lining / audit12346、zhoumin / audit12347、wutong / audit12348（采购审核员）；sysadmin / sysadmin12345（系统管理员）"
         />
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
           <el-form-item label="管理员账号" prop="account">

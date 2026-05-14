@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
+import { useAdminSettingsStore } from '../../stores/adminSettings'
 import { useReviewsStore } from '../../stores/reviews'
 import { useStandardsStore } from '../../stores/standards'
 import StatCard from '../../components/StatCard.vue'
@@ -12,6 +13,7 @@ import { formatDate, formatDateTime, normalizeKeyword } from '../../utils/format
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const adminSettingsStore = useAdminSettingsStore()
 const reviewsStore = useReviewsStore()
 const standardsStore = useStandardsStore()
 
@@ -35,10 +37,14 @@ const bulkForm = reactive({
   nextStatus: 'under_review',
   feedback: '',
 })
-const reviewerOptions = ['采购审核员 金箍', '复核专员 木吒', '采购经理 敖烈']
+const canAssignAppeals = computed(() => authStore.adminRole === 'system-admin')
+const reviewerOptions = computed(() => adminSettingsStore.reviewerAccounts.map((item) => item.name))
+const visibleAppeals = computed(() =>
+  reviewsStore.visibleAppealsByAdmin(authStore.adminRole, authStore.displayName),
+)
 
 const appealRows = computed(() =>
-  reviewsStore.allAppeals.filter((item) => {
+  visibleAppeals.value.filter((item) => {
     const keywordMatched =
       !filters.keyword ||
       normalizeKeyword(item.supplierName).includes(normalizeKeyword(filters.keyword)) ||
@@ -50,22 +56,18 @@ const appealRows = computed(() =>
 )
 
 const activeCount = computed(() =>
-  reviewsStore.allAppeals.filter((item) => ['submitted', 'under_review', 'supplement_required'].includes(item.status)).length,
+  visibleAppeals.value.filter((item) => ['submitted', 'under_review', 'supplement_required'].includes(item.status)).length,
 )
 const supplementCount = computed(() =>
-  reviewsStore.allAppeals.filter((item) => item.status === 'supplement_required').length,
+  visibleAppeals.value.filter((item) => item.status === 'supplement_required').length,
 )
-const unassignedCount = computed(() => reviewsStore.allAppeals.filter((item) => !item.assigneeName).length)
-const acceptedCount = computed(() =>
-  reviewsStore.allAppeals.filter((item) => item.status === 'accepted').length,
-)
-const closedCount = computed(() =>
-  reviewsStore.allAppeals.filter((item) => ['rejected', 'closed'].includes(item.status)).length,
-)
+const unassignedCount = computed(() => visibleAppeals.value.filter((item) => !item.assigneeName).length)
+const acceptedCount = computed(() => visibleAppeals.value.filter((item) => item.status === 'accepted').length)
+const closedCount = computed(() => visibleAppeals.value.filter((item) => ['rejected', 'closed'].includes(item.status)).length)
 const reviewerWorkloads = computed(() => {
   const groups = new Map()
 
-  reviewsStore.allAppeals.forEach((item) => {
+  visibleAppeals.value.forEach((item) => {
     const key = item.assigneeName || '待指派'
     const current = groups.get(key) || {
       name: key,
@@ -91,10 +93,10 @@ const reviewerWorkloads = computed(() => {
   return Array.from(groups.values()).sort((a, b) => b.active - a.active || b.total - a.total)
 })
 const reasonStats = computed(() => {
-  const total = reviewsStore.allAppeals.length || 1
+  const total = visibleAppeals.value.length || 1
   const groups = new Map()
 
-  reviewsStore.allAppeals.forEach((item) => {
+  visibleAppeals.value.forEach((item) => {
     const key = reasonTypeLabel(item.reasonType)
     groups.set(key, (groups.get(key) || 0) + 1)
   })
@@ -108,18 +110,18 @@ const reasonStats = computed(() => {
     .sort((a, b) => b.count - a.count)
 })
 const assignedRate = computed(() => {
-  const total = reviewsStore.allAppeals.length
+  const total = visibleAppeals.value.length
   if (!total) return 0
-  return Math.round((reviewsStore.allAppeals.filter((item) => item.assigneeName).length / total) * 100)
+  return Math.round((visibleAppeals.value.filter((item) => item.assigneeName).length / total) * 100)
 })
 const avgHandleHours = computed(() => {
-  const rows = reviewsStore.allAppeals.filter((item) => item.updatedAt && item.submittedAt)
+  const rows = visibleAppeals.value.filter((item) => item.updatedAt && item.submittedAt)
   if (!rows.length) return 0
   const totalHours = rows.reduce((sum, item) => sum + (new Date(item.updatedAt) - new Date(item.submittedAt)) / 3600000, 0)
   return Math.round((totalHours / rows.length) * 10) / 10
 })
 const acceptedRate = computed(() => {
-  const total = reviewsStore.allAppeals.length
+  const total = visibleAppeals.value.length
   if (!total) return 0
   return Math.round((acceptedCount.value / total) * 100)
 })
@@ -228,10 +230,15 @@ function openRecordDetail() {
 
 function assignSelected(startReview = false) {
   try {
+    if (!canAssignAppeals.value) {
+      throw new Error('只有系统管理员可以指派申诉复核任务。')
+    }
+
     const result = reviewsStore.assignAppeals({
       appealIds: selectedAppealIds.value,
-      assigneeName: bulkForm.assigneeName || authStore.displayName,
+      assigneeName: bulkForm.assigneeName,
       operatorName: authStore.displayName,
+      operatorRole: authStore.adminRole,
       startReview,
     })
     ElMessage.success(`已完成 ${result.length} 条申诉的${startReview ? '指派并受理' : '指派'}。`)
@@ -391,7 +398,7 @@ function submitAction() {
 
           <el-form label-position="top">
             <div class="bulk-grid">
-              <el-form-item label="复核人">
+              <el-form-item v-if="canAssignAppeals" label="复核人">
                 <el-select v-model="bulkForm.assigneeName" placeholder="选择复核人">
                   <el-option v-for="item in reviewerOptions" :key="item" :label="item" :value="item" />
                 </el-select>
@@ -405,13 +412,16 @@ function submitAction() {
                 </el-select>
               </el-form-item>
             </div>
+            <div v-if="!canAssignAppeals" class="status-text" style="margin-bottom: 12px">
+              当前账号仅可查看已分派给自己的申诉复核任务，不能进行批量指派。
+            </div>
             <el-form-item label="批量处理意见">
               <el-input v-model="bulkForm.feedback" type="textarea" :rows="3" placeholder="会同步写入选中申诉的处理意见" />
             </el-form-item>
           </el-form>
           <div class="toolbar">
-            <el-button type="primary" plain @click="assignSelected()">批量指派</el-button>
-            <el-button type="primary" @click="assignSelected(true)">指派并开始复核</el-button>
+            <el-button v-if="canAssignAppeals" type="primary" plain @click="assignSelected()">批量指派</el-button>
+            <el-button v-if="canAssignAppeals" type="primary" @click="assignSelected(true)">指派并开始复核</el-button>
             <el-button type="warning" plain @click="batchProcessSelected">批量处理状态</el-button>
             <span class="status-text">当前已选 {{ selectedAppealIds.length }} 条</span>
           </div>

@@ -12,6 +12,8 @@ import StatusTag from '../../components/StatusTag.vue'
 import StatCard from '../../components/StatCard.vue'
 import { formatDateTime, normalizeKeyword } from '../../utils/format'
 
+const HUA_RUI_SUPPLIER_ID = 'sup-001'
+
 const router = useRouter()
 const authStore = useAuthStore()
 const reviewsStore = useReviewsStore()
@@ -28,6 +30,10 @@ const keywordInput = reactive({
   value: '',
 })
 
+const visibleDocuments = computed(() =>
+  reviewsStore.visibleDocumentsByAdmin(authStore.adminRole, authStore.displayName),
+)
+
 function buildRow(item) {
   const supplier = suppliersStore.currentSupplier(item.supplierId)
   return {
@@ -39,7 +45,7 @@ function buildRow(item) {
 }
 
 const tableData = computed(() =>
-  reviewsStore.enrichedDocuments
+  visibleDocuments.value
     .map(buildRow)
     .filter((item) => {
       const keywordMatched =
@@ -53,13 +59,18 @@ const tableData = computed(() =>
         (new Date(item.uploadedAt) >= new Date(filters.range[0]) &&
           new Date(item.uploadedAt) <= new Date(filters.range[1]))
       return keywordMatched && statusMatched && categoryMatched && rangeMatched
+    })
+    .sort((a, b) => {
+      const focusRank = Number(b.supplierId === HUA_RUI_SUPPLIER_ID) - Number(a.supplierId === HUA_RUI_SUPPLIER_ID)
+      if (focusRank) return focusRank
+      return new Date(b.uploadedAt) - new Date(a.uploadedAt)
     }),
 )
 
-const approvedCount = computed(() => reviewsStore.enrichedDocuments.filter((item) => item.status === 'approved').length)
-const pendingCount = computed(() => reviewsStore.enrichedDocuments.filter((item) => item.status === 'pending').length)
-const highRiskCount = computed(() => reviewsStore.riskRecords.filter((item) => item.riskStatus.rank >= 3).length)
-const notifiedCount = computed(() => reviewsStore.riskRecords.filter((item) => item.notificationState.count > 0).length)
+const approvedCount = computed(() => visibleDocuments.value.filter((item) => item.status === 'approved').length)
+const pendingCount = computed(() => reviewsStore.visiblePendingRecordsByAdmin(authStore.adminRole, authStore.displayName).length)
+const highRiskCount = computed(() => visibleDocuments.value.filter((item) => item.riskStatus.rank >= 3).length)
+const notifiedCount = computed(() => visibleDocuments.value.filter((item) => item.notificationState.count > 0).length)
 
 function openDetail(row) {
   router.push(`/admin/reviews/${row.id}`)

@@ -10,9 +10,27 @@ const router = useRouter()
 const authStore = useAuthStore()
 const reviewsStore = useReviewsStore()
 
-const pendingCount = computed(() => reviewsStore.pendingRecords.length)
-const appealCount = computed(() => reviewsStore.activeAppealCount)
-const rereviewCount = computed(() => reviewsStore.activeRereviewCount)
+const pendingCount = computed(() =>
+  reviewsStore.visiblePendingRecordsByAdmin(authStore.adminRole, authStore.displayName).length,
+)
+const appealCount = computed(() =>
+  reviewsStore
+    .visibleAppealsByAdmin(authStore.adminRole, authStore.displayName)
+    .filter((item) => ['submitted', 'under_review', 'supplement_required'].includes(item.status)).length,
+)
+const rereviewCount = computed(() =>
+  reviewsStore
+    .visibleRereviewTasksByAdmin(authStore.adminRole, authStore.displayName)
+    .filter((item) => ['pending', 'in_progress'].includes(item.status)).length,
+)
+const workbenchTitle = computed(() =>
+  authStore.adminRole === 'system-admin' ? '系统管理员端' : '采购审核端',
+)
+const workbenchDescription = computed(() =>
+  authStore.adminRole === 'system-admin'
+    ? '统一处理审核、申诉、复审、风控、供应商档案和系统配置。'
+    : '统一处理分派给你的审核、申诉和复审任务。',
+)
 
 const menus = [
   { index: '/admin/reviews', label: '管理员审核', icon: 'Tickets' },
@@ -41,8 +59,8 @@ function logout() {
       <el-aside width="284px" class="layout-aside">
         <div class="brand-block">
           <span class="brand-mark admin">悟空审核台</span>
-          <h2>管理员审核端</h2>
-          <p>统一处理审核、申诉、复审、风控、供应商档案和系统配置。</p>
+          <h2>{{ workbenchTitle }}</h2>
+          <p>{{ workbenchDescription }}</p>
         </div>
         <el-menu
           :default-active="route.path"
@@ -66,7 +84,7 @@ function logout() {
       <el-container>
         <el-header class="layout-header">
           <div>
-            <div class="header-kicker">Admin Workbench</div>
+            <div class="header-kicker">{{ workbenchTitle }}</div>
             <div class="header-title">{{ authStore.displayName }}</div>
           </div>
           <div class="toolbar">

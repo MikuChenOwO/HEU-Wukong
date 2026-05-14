@@ -133,14 +133,14 @@ function buildInitialRereviewTasks() {
       id: 'rr-002',
       taskNo: 'RR-202604-0002',
       supplierId: 'sup-001',
-      supplierName: '悟空精工（深圳）有限公司',
+      supplierName: '华锐精密制造（深圳）有限公司',
       recordId: 'doc-002',
       previousRecordId: '',
       category: 'quality-system',
       triggerSource: 'file-update',
       taskType: 'change',
       status: 'in_progress',
-      reviewerName: '采购审核员-金箍',
+      reviewerName: '周岚',
       assignedAt: '2026-04-25T15:00:00',
       reason: '质量体系证书临期，供应商已更新资料，进入复审中。',
       comment: '已收到最新版扫描件，正在核对认证范围与盖章附件。',
@@ -159,7 +159,7 @@ function buildInitialRereviewTasks() {
         {
           id: 'rrlog-003',
           action: '开始复审',
-          actor: '采购审核员-金箍',
+          actor: '周岚',
           at: '2026-04-25T15:10:00',
           note: '已开始核对证书有效期与认证范围。',
         },
@@ -535,6 +535,33 @@ export const useReviewsStore = defineStore('reviews', {
       state.documents
         .map((item) => enrichRecord(item, state.notificationLogs))
         .sort(sortByUploadedAt),
+    visibleDocumentsByAdmin:
+      (state) =>
+      (adminRole, displayName) => {
+        const normalizedName = String(displayName || '').trim()
+        const items = state.documents.map((item) => enrichRecord(item, state.notificationLogs)).sort(sortByUploadedAt)
+
+        if (adminRole === 'system-admin') {
+          return items
+        }
+
+        return normalizedName ? items.filter((item) => item.reviewerName === normalizedName) : []
+      },
+    visiblePendingRecordsByAdmin:
+      (state) =>
+      (adminRole, displayName) => {
+        const normalizedName = String(displayName || '').trim()
+        const items = state.documents
+          .map((item) => enrichRecord(item, state.notificationLogs))
+          .filter((item) => item.status === 'pending')
+          .sort(sortByUploadedAt)
+
+        if (adminRole === 'system-admin') {
+          return items
+        }
+
+        return normalizedName ? items.filter((item) => item.reviewerName === normalizedName) : []
+      },
     recordsBySupplier: (state) => (supplierId) =>
       state.documents
         .filter((item) => item.supplierId === supplierId)
@@ -586,6 +613,20 @@ export const useReviewsStore = defineStore('reviews', {
       state.appeals
         .map((item) => enrichAppeal(item, state.documents.find((record) => record.id === item.recordId)))
         .sort(sortByUpdatedAt),
+    visibleAppealsByAdmin:
+      (state) =>
+      (adminRole, displayName) => {
+        const normalizedName = String(displayName || '').trim()
+        const items = state.appeals
+          .map((item) => enrichAppeal(item, state.documents.find((record) => record.id === item.recordId)))
+          .sort(sortByUpdatedAt)
+
+        if (adminRole === 'system-admin') {
+          return items
+        }
+
+        return normalizedName ? items.filter((item) => item.assigneeName === normalizedName) : []
+      },
     activeAppealCount: (state) =>
       state.appeals.filter((item) => ['submitted', 'under_review', 'supplement_required'].includes(item.status)).length,
     appealsBySupplier: (state) => (supplierId) =>
@@ -607,6 +648,20 @@ export const useReviewsStore = defineStore('reviews', {
       state.rereviewTasks
         .map((item) => enrichRereviewTaskWithRecord(item, state.documents, state.notificationLogs))
         .sort(sortByUpdatedAt),
+    visibleRereviewTasksByAdmin:
+      (state) =>
+      (adminRole, displayName) => {
+        const normalizedName = String(displayName || '').trim()
+        const items = state.rereviewTasks
+          .map((item) => enrichRereviewTaskWithRecord(item, state.documents, state.notificationLogs))
+          .sort(sortByUpdatedAt)
+
+        if (adminRole === 'system-admin') {
+          return items
+        }
+
+        return normalizedName ? items.filter((item) => item.reviewerName === normalizedName) : []
+      },
     activeRereviewCount: (state) => state.rereviewTasks.filter((item) => isRereviewActive(item)).length,
     rereviewTasksBySupplier: (state) => (supplierId) =>
       state.rereviewTasks
@@ -1190,7 +1245,11 @@ export const useReviewsStore = defineStore('reviews', {
       })
       return this.getAppeal(appeal.id)
     },
-    assignAppeals({ appealIds, assigneeName, operatorName = '管理员', startReview = false }) {
+    assignAppeals({ appealIds, assigneeName, operatorName = '管理员', operatorRole = 'system-admin', startReview = false }) {
+      if (operatorRole !== 'system-admin') {
+        throw new Error('只有系统管理员可以指派申诉复核任务。')
+      }
+
       const normalizedAssignee = String(assigneeName || '').trim()
       if (!normalizedAssignee) {
         throw new Error('请先选择或填写复核人。')

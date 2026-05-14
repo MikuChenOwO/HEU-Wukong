@@ -31,7 +31,7 @@ function yesNoMeta(flag) {
 
 function accountRoleMeta(role) {
   return {
-    reviewer: { label: '采购 / 审核员', type: 'warning' },
+    reviewer: { label: '采购审核员', type: 'warning' },
     'system-admin': { label: '系统管理员', type: 'danger' },
   }[role] || { label: role || '未知', type: 'info' }
 }
@@ -100,7 +100,7 @@ function handleSaveInterface(row) {
       v-if="!canManageSystem"
       type="warning"
       :closable="false"
-      title="当前登录角色为采购 / 审核员，本页可查看，但系统级配置建议使用“系统管理员”账号维护。"
+      title="当前登录角色为采购审核员，本页仅可查看系统配置，维护建议使用“系统管理员”账号。"
     />
 
     <div class="section-card permission-card">
@@ -111,11 +111,11 @@ function handleSaveInterface(row) {
               <div class="panel-title">
                 <div>
                   <h3>角色分布</h3>
-                  <p>当前系统准备了“采购 / 审核员”和“系统管理员”两类后台账号。</p>
+                  <p>当前系统准备了“采购审核员”和“系统管理员”两类后台账号。</p>
                 </div>
               </div>
               <div class="capsule-list">
-                <el-tag type="warning">采购 / 审核员 {{ reviewerAccounts.length }}</el-tag>
+                <el-tag type="warning">采购审核员 {{ reviewerAccounts.length }}</el-tag>
                 <el-tag type="danger">系统管理员 {{ systemAdminAccounts.length }}</el-tag>
               </div>
             </div>
@@ -187,7 +187,7 @@ function handleSaveInterface(row) {
                     <el-tag :type="yesNoMeta(row.supplier).type">{{ yesNoMeta(row.supplier).label }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="采购 / 审核员" min-width="140">
+                <el-table-column label="采购审核员" min-width="140">
                   <template #default="{ row }">
                     <el-tag :type="yesNoMeta(row.reviewer).type">{{ yesNoMeta(row.reviewer).label }}</el-tag>
                   </template>

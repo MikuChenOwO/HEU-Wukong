@@ -1,14 +1,16 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
 import { useStandardsStore } from '../../stores/standards'
+import { useSuppliersStore } from '../../stores/suppliers'
 import AppFooter from '../../components/AppFooter.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const standardsStore = useStandardsStore()
+const suppliersStore = useSuppliersStore()
 
 const MOCK_CODE = '888888'
 const activeTab = ref('login')
@@ -19,12 +21,16 @@ const resetDialogVisible = ref(false)
 const loginFormRef = ref(null)
 const registerFormRef = ref(null)
 const resetFormRef = ref(null)
+const querying = ref(false)
+const verifyResult = ref(null)
 const registerCodeSent = ref(false)
 const resetCodeSent = ref(false)
+const registerLookupTimer = ref(null)
+const lastAutoLookupCode = ref('')
 
 const loginForm = reactive({
   account: 'supplier01',
-  password: '123456',
+  password: '12345678',
 })
 
 const registerForm = reactive({
@@ -41,6 +47,7 @@ const registerForm = reactive({
   productionAddress: '',
   supplierType: 'raw',
   productLevel: 'A',
+  templateId: '',
   foundedAt: '',
   registeredCapital: '',
   businessScope: '',
@@ -56,6 +63,105 @@ const resetForm = reactive({
 const templateOptions = computed(() =>
   standardsStore.activeTemplates.filter((item) => item.supplierType === registerForm.supplierType),
 )
+
+function normalizeCreditCode(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .slice(0, 18)
+}
+
+function applyRegistryAutofill(result) {
+  const autofill = result?.autofill || {}
+  Object.assign(registerForm, {
+    enterpriseName: autofill.enterpriseName || registerForm.enterpriseName,
+    creditCode: normalizeCreditCode(autofill.creditCode || registerForm.creditCode),
+    legalPerson: autofill.legalPerson || registerForm.legalPerson,
+    contactName: autofill.contactName || registerForm.contactName,
+    contactPhone: autofill.contactPhone || registerForm.contactPhone,
+    registerAddress: autofill.registerAddress || registerForm.registerAddress,
+    productionAddress: autofill.productionAddress || registerForm.productionAddress,
+    foundedAt: autofill.foundedAt || registerForm.foundedAt,
+    registeredCapital: autofill.registeredCapital || registerForm.registeredCapital,
+    businessScope: autofill.businessScope || registerForm.businessScope,
+    supplierType: autofill.supplierType || registerForm.supplierType,
+    productLevel: autofill.productLevel || registerForm.productLevel,
+  })
+
+  registerForm.templateId =
+    autofill.templateId || templateOptions.value[0]?.id || standardsStore.activeTemplates[0]?.id || registerForm.templateId
+}
+
+function lookupAndAutofillCreditCode({ auto = false } = {}) {
+  const creditCode = normalizeCreditCode(registerForm.creditCode)
+  if (!/^[0-9A-Z]{18}$/.test(creditCode)) {
+    if (!auto) {
+      ElMessage.warning('请先输入 18 位统一社会信用代码后再查询。')
+    }
+    return
+  }
+
+  querying.value = true
+  setTimeout(() => {
+    try {
+      const result = suppliersStore.lookupEnterpriseByCreditCode(creditCode)
+      verifyResult.value = result
+
+      if (result.matched) {
+        applyRegistryAutofill(result)
+        registerFormRef.value?.clearValidate?.([
+          'enterpriseName',
+          'legalPerson',
+          'registerAddress',
+          'supplierType',
+          'productLevel',
+        ])
+        if (!auto || result.registry?.enterpriseName === '华锐精密制造（深圳）有限公司') {
+          ElMessage.success('已按工商 Mock 数据完成企业信息回填。')
+        }
+      } else if (!auto) {
+        ElMessage.warning(result.message)
+      }
+
+      lastAutoLookupCode.value = creditCode
+    } finally {
+      querying.value = false
+    }
+  }, auto ? 250 : 400)
+}
+
+watch(
+  () => registerForm.creditCode,
+  (value) => {
+    const normalized = normalizeCreditCode(value)
+    if (value !== normalized) {
+      registerForm.creditCode = normalized
+      return
+    }
+
+    if (!normalized || normalized.length !== 18) {
+      verifyResult.value = null
+      lastAutoLookupCode.value = ''
+      if (registerLookupTimer.value) {
+        clearTimeout(registerLookupTimer.value)
+        registerLookupTimer.value = null
+      }
+      return
+    }
+
+    if (normalized === lastAutoLookupCode.value) return
+
+    if (registerLookupTimer.value) clearTimeout(registerLookupTimer.value)
+    registerLookupTimer.value = setTimeout(() => {
+      lookupAndAutofillCreditCode({ auto: true })
+      registerLookupTimer.value = null
+    }, 300)
+  },
+)
+
+onBeforeUnmount(() => {
+  if (registerLookupTimer.value) clearTimeout(registerLookupTimer.value)
+})
 
 const loginRules = {
   account: [{ required: true, message: '请输入供应商账号或手机号', trigger: 'blur' }],
@@ -183,7 +289,7 @@ async function handleRegister() {
     try {
       authStore.registerAndLogin({
         ...registerForm,
-        templateId: templateOptions.value[0]?.id || standardsStore.activeTemplates[0]?.id,
+        templateId: registerForm.templateId || templateOptions.value[0]?.id || standardsStore.activeTemplates[0]?.id,
       })
       ElMessage.success('注册成功，已自动登录并进入供应商端。')
       router.push('/supplier/overview')
@@ -237,7 +343,7 @@ async function handleResetPassword() {
             <el-alert
               type="info"
               :closable="false"
-              title="测试账号：supplier01 / 123456；Mock 验证码：888888"
+              title="测试账号：supplier01 / 12345678；Mock 验证码：888888"
               style="margin-bottom: 16px"
             />
             <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules" label-position="top">
@@ -272,7 +378,22 @@ async function handleResetPassword() {
                   <el-input v-model="registerForm.enterpriseName" />
                 </el-form-item>
                 <el-form-item label="统一社会信用代码" prop="creditCode">
-                  <el-input v-model="registerForm.creditCode" maxlength="18" />
+                  <div class="code-row">
+                    <el-input
+                      v-model="registerForm.creditCode"
+                      maxlength="18"
+                      placeholder="输入 18 位代码后自动查询并回填"
+                      @blur="lookupAndAutofillCreditCode()"
+                    />
+                    <el-button
+                      type="primary"
+                      plain
+                      :disabled="normalizeCreditCode(registerForm.creditCode).length !== 18"
+                      @click="lookupAndAutofillCreditCode()"
+                    >
+                      查询并回填
+                    </el-button>
+                  </div>
                 </el-form-item>
                 <el-form-item label="法人" prop="legalPerson">
                   <el-input v-model="registerForm.legalPerson" />

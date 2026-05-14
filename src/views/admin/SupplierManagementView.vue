@@ -1,5 +1,6 @@
 ﻿<script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
@@ -10,6 +11,9 @@ import RiskStatusTag from '../../components/RiskStatusTag.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import { formatDateTime, formatPhone, normalizeKeyword } from '../../utils/format'
 
+const HUA_RUI_SUPPLIER_ID = 'sup-001'
+
+const route = useRoute()
 const authStore = useAuthStore()
 const suppliersStore = useSuppliersStore()
 const reviewsStore = useReviewsStore()
@@ -24,7 +28,7 @@ const batchDetailVisible = ref(false)
 const createDialogVisible = ref(false)
 const importDialogVisible = ref(false)
 const historyBackfillDialogVisible = ref(false)
-const currentSupplierId = ref('')
+const currentSupplierId = ref(HUA_RUI_SUPPLIER_ID)
 const tab = ref('profile')
 const adminUploading = ref(false)
 const creatingSupplier = ref(false)
@@ -372,6 +376,22 @@ const currentHistoryBackfillBatches = computed(() =>
 const currentHistoricalRecords = computed(() =>
   currentRecords.value.filter((item) => item.isHistoricalBackfill).slice(0, 10),
 )
+
+watch(
+  () => route.query.supplierId,
+  (supplierId) => {
+    const targetId = String(supplierId || HUA_RUI_SUPPLIER_ID)
+    if (!suppliersStore.currentSupplier(targetId)) return
+
+    currentSupplierId.value = targetId
+    if (supplierId) {
+      drawerVisible.value = true
+      tab.value = 'profile'
+    }
+  },
+  { immediate: true },
+)
+
 const selectedImportBatch = computed(() =>
   suppliersStore.recentImportBatches.find((item) => item.id === selectedImportBatchId.value),
 )
@@ -701,7 +721,7 @@ function buildHistoryBackfillCandidates(supplier, preset = 'annual-review') {
       category: 'business-license',
       status: 'approved',
       reviewedAt: '2024-06-18T10:30:00',
-      reviewerName: '采购审核员-李宁',
+      reviewerName: '李宁',
       scoreTotal: 92,
       validUntil: `${validUntilYear}-12-31`,
       certificationScope: '企业主体经营资质',
@@ -715,7 +735,7 @@ function buildHistoryBackfillCandidates(supplier, preset = 'annual-review') {
       category: 'quality-system',
       status: supplier.lifecycle.status === 'watch' ? 'conditional' : 'approved',
       reviewedAt: '2025-02-24T15:10:00',
-      reviewerName: '质量复核员-周敏',
+      reviewerName: '周敏',
       scoreTotal: supplier.lifecycle.status === 'watch' ? 83 : 89,
       validUntil: `${validUntilYear}-08-30`,
       certificationScope: '质量管理体系范围核验',
@@ -729,7 +749,7 @@ function buildHistoryBackfillCandidates(supplier, preset = 'annual-review') {
       category: supplier.enterprise.supplierType === 'tech' ? 'patent-cert' : 'other',
       status: supplier.lifecycle.status === 'frozen' ? 'rejected' : isMixedArchive ? 'conditional' : 'approved',
       reviewedAt: '2025-09-12T11:40:00',
-      reviewerName: '专项审核员-吴桐',
+      reviewerName: '吴桐',
       scoreTotal: supplier.lifecycle.status === 'frozen' ? 74 : isMixedArchive ? 82 : 88,
       validUntil: `${validUntilYear}-10-31`,
       certificationScope: supplier.enterprise.supplierType === 'tech' ? '专利与研发能力证明' : '专项资质与补充材料',

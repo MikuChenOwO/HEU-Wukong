@@ -1,11 +1,16 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '../../stores/auth'
 import { useStandardsStore } from '../../stores/standards'
 
+const authStore = useAuthStore()
 const standardsStore = useStandardsStore()
+const canManageSystem = computed(() => authStore.adminRole === 'system-admin')
 const dialogVisible = ref(false)
+const detailVisible = ref(false)
 const editingId = ref('')
+const focusedTemplate = ref(null)
 
 const form = reactive({
   id: '',
@@ -31,6 +36,10 @@ const thresholdRows = computed(() => [
 ])
 
 function openCreate() {
+  if (!canManageSystem.value) {
+    ElMessage.warning('当前账号仅可查看审核标准，无法新增模板。')
+    return
+  }
   editingId.value = ''
   Object.assign(form, {
     id: '',
@@ -50,6 +59,10 @@ function openCreate() {
 }
 
 function openEdit(row) {
+  if (!canManageSystem.value) {
+    ElMessage.warning('当前账号仅可查看审核标准，无法编辑或停用模板。')
+    return
+  }
   editingId.value = row.id
   Object.assign(form, {
     id: row.id,
@@ -68,7 +81,16 @@ function openEdit(row) {
   dialogVisible.value = true
 }
 
+function openDetail(row) {
+  focusedTemplate.value = row
+  detailVisible.value = true
+}
+
 function saveTemplate() {
+  if (!canManageSystem.value) {
+    ElMessage.warning('当前账号仅可查看审核标准，无法保存模板。')
+    return
+  }
   standardsStore.upsertTemplate({
     id: editingId.value || '',
     name: form.name,
@@ -88,6 +110,16 @@ function saveTemplate() {
   dialogVisible.value = false
   ElMessage.success(editingId.value ? '模板已更新。' : '模板已新增。')
 }
+
+function documentLabel(value) {
+  return standardsStore.documentTypes.find((item) => item.value === value)?.label || value
+}
+
+function openEditFromDetail() {
+  if (!focusedTemplate.value) return
+  detailVisible.value = false
+  openEdit(focusedTemplate.value)
+}
 </script>
 
 <template>
@@ -97,8 +129,17 @@ function saveTemplate() {
         <h1>审核标准管理</h1>
         <p>支持维护审核模板、版本状态、准入门槛、权重和一票否决项，保留历史模板供不同供方类型适配。</p>
       </div>
-      <el-button type="primary" @click="openCreate">新增模板</el-button>
+      <el-button v-if="canManageSystem" type="primary" @click="openCreate">新增模板</el-button>
+      <el-tag v-else type="info">仅查看</el-tag>
     </div>
+
+    <el-alert
+      v-if="!canManageSystem"
+      type="info"
+      :closable="false"
+      title="当前账号仅可查看审核标准，模板新增、编辑和停用仅系统管理员可操作。"
+      style="margin-bottom: 16px"
+    />
 
     <div class="content-grid two-col">
       <div class="section-card table-card">
@@ -118,11 +159,15 @@ function saveTemplate() {
           <el-table-column label="操作" min-width="180" fixed="right">
             <template #default="{ row }">
               <div class="toolbar">
+                <el-button text type="primary" @click="openDetail(row)">查看详情</el-button>
+              </div>
+              <div v-if="canManageSystem" class="toolbar" style="margin-top: 6px">
                 <el-button text type="primary" @click="openEdit(row)">编辑</el-button>
                 <el-button text type="primary" @click="standardsStore.toggleTemplateStatus(row.id)">
                   {{ row.status === '启用' ? '停用' : '启用' }}
                 </el-button>
               </div>
+              <el-tag v-else type="info">仅查看</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -219,7 +264,58 @@ function saveTemplate() {
       <template #footer>
         <div class="toolbar" style="justify-content: flex-end">
           <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveTemplate">保存</el-button>
+          <el-button v-if="canManageSystem" type="primary" @click="saveTemplate">保存</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="detailVisible" :title="focusedTemplate?.name || '模板详情'" width="760px">
+      <div v-if="focusedTemplate" class="detail-grid">
+        <div class="metric-row">
+          <span>模板名称</span>
+          <strong>{{ focusedTemplate.name }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>版本</span>
+          <strong>{{ focusedTemplate.version }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>供应商类型</span>
+          <strong>{{ standardsStore.supplierTypes.find((item) => item.value === focusedTemplate.supplierType)?.label }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>产品等级</span>
+          <strong>{{ standardsStore.productLevels.find((item) => item.value === focusedTemplate.productLevel)?.label }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>准入门槛</span>
+          <strong>{{ focusedTemplate.threshold }} 分</strong>
+        </div>
+        <div class="metric-row">
+          <span>状态</span>
+          <strong>{{ focusedTemplate.status }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>权重分配</span>
+          <strong>质量 {{ focusedTemplate.weights.quality }} / 技术 {{ focusedTemplate.weights.technical }} / 商务 {{ focusedTemplate.weights.business }} / 加分上限 {{ focusedTemplate.weights.bonusMax }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>必传材料</span>
+          <strong>{{ focusedTemplate.requiredDocuments.map(documentLabel).join('、') }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>推荐材料</span>
+          <strong>{{ focusedTemplate.recommendedDocuments.map(documentLabel).join('、') }}</strong>
+        </div>
+        <div class="metric-row span-2">
+          <span>一票否决项</span>
+          <strong>{{ focusedTemplate.vetoRules.length ? focusedTemplate.vetoRules.join('；') : '无' }}</strong>
+        </div>
+      </div>
+      <template #footer>
+        <div class="toolbar" style="justify-content: flex-end">
+          <el-button @click="detailVisible = false">关闭</el-button>
+          <el-button v-if="canManageSystem" type="primary" @click="openEditFromDetail">编辑模板</el-button>
         </div>
       </template>
     </el-dialog>
@@ -245,6 +341,12 @@ function saveTemplate() {
   grid-column: span 2;
 }
 
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 @media (max-width: 900px) {
   .form-grid {
     grid-template-columns: 1fr;
@@ -252,6 +354,10 @@ function saveTemplate() {
 
   .span-2 {
     grid-column: span 1;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

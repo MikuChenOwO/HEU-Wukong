@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
+import { useAdminSettingsStore } from '../../stores/adminSettings'
 import { useReviewsStore } from '../../stores/reviews'
 import { useStandardsStore } from '../../stores/standards'
 import RiskStatusTag from '../../components/RiskStatusTag.vue'
@@ -12,6 +13,7 @@ import { formatDateTime, normalizeKeyword } from '../../utils/format'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const adminSettingsStore = useAdminSettingsStore()
 const reviewsStore = useReviewsStore()
 const standardsStore = useStandardsStore()
 
@@ -41,7 +43,11 @@ const bulkForm = reactive({
   lifecycleStatus: 'watch',
 })
 
-const reviewerOptions = ['采购审核员-金箍', '复审专员-木吒', '采购经理-敖烈']
+const canAssignRereviews = computed(() => authStore.adminRole === 'system-admin')
+const reviewerOptions = computed(() => adminSettingsStore.reviewerAccounts.map((item) => item.name))
+const visibleTasks = computed(() =>
+  reviewsStore.visibleRereviewTasksByAdmin(authStore.adminRole, authStore.displayName),
+)
 
 function statusMeta(status) {
   return {
@@ -66,7 +72,7 @@ function documentTypeLabel(value) {
 }
 
 const taskRows = computed(() =>
-  reviewsStore.allRereviewTasks.filter((item) => {
+  visibleTasks.value.filter((item) => {
     const keywordMatched =
       !filters.keyword ||
       normalizeKeyword(item.supplierName).includes(normalizeKeyword(filters.keyword)) ||
@@ -78,11 +84,11 @@ const taskRows = computed(() =>
   }),
 )
 
-const pendingCount = computed(() => reviewsStore.allRereviewTasks.filter((item) => item.status === 'pending').length)
-const progressCount = computed(() => reviewsStore.allRereviewTasks.filter((item) => item.status === 'in_progress').length)
-const approvedCount = computed(() => reviewsStore.allRereviewTasks.filter((item) => item.status === 'approved').length)
-const rejectedCount = computed(() => reviewsStore.allRereviewTasks.filter((item) => item.status === 'rejected').length)
-const assignedCount = computed(() => reviewsStore.allRereviewTasks.filter((item) => item.reviewerName).length)
+const pendingCount = computed(() => visibleTasks.value.filter((item) => item.status === 'pending').length)
+const progressCount = computed(() => visibleTasks.value.filter((item) => item.status === 'in_progress').length)
+const approvedCount = computed(() => visibleTasks.value.filter((item) => item.status === 'approved').length)
+const rejectedCount = computed(() => visibleTasks.value.filter((item) => item.status === 'rejected').length)
+const assignedCount = computed(() => visibleTasks.value.filter((item) => item.reviewerName).length)
 
 const focusTask = computed(() => {
   const taskId = String(focusedTaskId.value || '')
@@ -206,9 +212,13 @@ function openReviewRecord() {
 
 function assignSelected(startReview = false) {
   try {
+    if (!canAssignRereviews.value) {
+      throw new Error('只有系统管理员可以指派重审任务。')
+    }
+
     const result = reviewsStore.assignRereviewTasks({
       taskIds: selectedTaskIds.value,
-      assigneeName: bulkForm.assigneeName || authStore.displayName,
+      assigneeName: bulkForm.assigneeName,
       operatorName: authStore.displayName,
       startReview,
       comment: bulkForm.comment,
@@ -315,7 +325,7 @@ function submitAction() {
 
           <el-form label-position="top">
             <div class="bulk-grid">
-              <el-form-item label="复审人">
+              <el-form-item v-if="canAssignRereviews" label="复审人">
                 <el-select v-model="bulkForm.assigneeName" placeholder="选择复审人">
                   <el-option v-for="item in reviewerOptions" :key="item" :label="item" :value="item" />
                 </el-select>
@@ -346,14 +356,17 @@ function submitAction() {
                 </el-select>
               </el-form-item>
             </div>
+            <div v-if="!canAssignRereviews" class="status-text" style="margin-bottom: 12px">
+              当前账号仅可查看已分派给自己的重审任务，不能进行批量指派。
+            </div>
 
             <el-form-item label="批量处理意见">
               <el-input v-model="bulkForm.comment" type="textarea" :rows="3" placeholder="会同步写入选中重审任务的处理意见。" />
             </el-form-item>
           </el-form>
           <div class="toolbar">
-            <el-button type="primary" plain @click="assignSelected()">批量指派</el-button>
-            <el-button type="primary" @click="assignSelected(true)">指派并开始复审</el-button>
+            <el-button v-if="canAssignRereviews" type="primary" plain @click="assignSelected()">批量指派</el-button>
+            <el-button v-if="canAssignRereviews" type="primary" @click="assignSelected(true)">指派并开始复审</el-button>
             <el-button type="warning" plain @click="batchProcessSelected">批量处理状态</el-button>
             <span class="status-text">当前已选 {{ selectedTaskIds.length }} 条</span>
           </div>

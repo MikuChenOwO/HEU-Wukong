@@ -9,13 +9,15 @@ import { useSuppliersStore } from '../../stores/suppliers'
 import StatCard from '../../components/StatCard.vue'
 import { formatDate, formatDateTime, normalizeKeyword } from '../../utils/format'
 
+const HUA_RUI_SUPPLIER_ID = 'sup-001'
+
 const router = useRouter()
 const authStore = useAuthStore()
 const reviewsStore = useReviewsStore()
 const standardsStore = useStandardsStore()
 const suppliersStore = useSuppliersStore()
 
-const selectedSupplierId = ref('')
+const selectedSupplierId = ref(HUA_RUI_SUPPLIER_ID)
 const ruleDrawerVisible = ref(false)
 const activeRuleCode = ref('')
 const activeRadarView = ref('overview')

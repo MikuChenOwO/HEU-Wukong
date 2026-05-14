@@ -82,6 +82,15 @@ export const useSuppliersStore = defineStore('suppliers', {
   },
   actions: {
     registerSupplier(form) {
+      const normalizedCreditCode = String(form.creditCode || '').trim().toUpperCase()
+      const existingSupplier = this.suppliers.find(
+        (item) => item.enterprise.creditCode === normalizedCreditCode,
+      )
+
+      if (existingSupplier) {
+        return existingSupplier
+      }
+
       const supplierId = `sup-${Date.now()}`
       const supplier = {
         id: supplierId,
@@ -124,7 +133,7 @@ export const useSuppliersStore = defineStore('suppliers', {
     },
     createSupplierByAdmin(form) {
       const account = String(form.account || '').trim() || `supplier${String(this.suppliers.length + 1).padStart(2, '0')}`
-      const password = String(form.password || '').trim() || '123456'
+      const password = String(form.password || '').trim() || '12345678'
 
       if (this.existsAccount(account)) {
         throw new Error('该登录账号已存在，请更换后再保存。')
@@ -174,7 +183,7 @@ export const useSuppliersStore = defineStore('suppliers', {
         }
 
         const account = item.account || `legacy${String(this.suppliers.length + importedSuppliers.length + index + 1).padStart(2, '0')}`
-        const password = item.password || '123456'
+        const password = item.password || '12345678'
 
         if (this.existsAccount(account)) {
           skippedSuppliers.push({
@@ -344,12 +353,17 @@ export const useSuppliersStore = defineStore('suppliers', {
         autofill: {
           enterpriseName: registry.enterpriseName,
           creditCode: normalizedCode,
-          legalPerson: registry.legalPerson,
-          registerAddress: registry.registerAddress,
-          foundedAt: enterprise.foundedAt || '',
-          registeredCapital: enterprise.registeredCapital || '',
-          businessScope: enterprise.businessScope || '',
-          productionAddress: enterprise.productionAddress || '',
+          legalPerson: registry.legalPerson || '',
+          registerAddress: registry.registerAddress || '',
+          contactName: registry.contactName || enterprise.contactName || '',
+          contactPhone: registry.contactPhone || enterprise.contactPhone || '',
+          foundedAt: registry.foundedAt || enterprise.foundedAt || '',
+          registeredCapital: registry.registeredCapital || enterprise.registeredCapital || '',
+          businessScope: registry.businessScope || enterprise.businessScope || '',
+          productionAddress: registry.productionAddress || enterprise.productionAddress || '',
+          supplierType: registry.supplierType || enterprise.supplierType || '',
+          productLevel: registry.productLevel || enterprise.productLevel || '',
+          templateId: registry.templateId || enterprise.templateId || '',
         },
         message: `已查询到工商 Mock 信息：${registry.enterpriseName}，${registry.status}。`,
       }

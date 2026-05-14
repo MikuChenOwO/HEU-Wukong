@@ -30,6 +30,9 @@ const supplier = computed(() => suppliersStore.currentSupplier(record.value?.sup
 const threshold = computed(() => standardsStore.resolveThreshold(supplier.value?.enterprise))
 const notificationLogs = computed(() => reviewsStore.notificationsByRecord(route.params.id))
 const latestNotification = computed(() => reviewsStore.latestNotificationByRecord(route.params.id))
+const canOperateReview = computed(
+  () => authStore.adminRole === 'system-admin' || record.value?.reviewerName === authStore.displayName,
+)
 
 const externalDecisionOptions = [
   { label: '人工确认通过', value: 'confirmed' },
@@ -321,6 +324,10 @@ function fillOpinionSummary() {
 
 function submitReview() {
   if (!record.value) return
+  if (!canOperateReview.value) {
+    ElMessage.error('当前仅可处理分派给自己的审核记录。')
+    return
+  }
   loading.value = true
   setTimeout(() => {
     try {
@@ -590,7 +597,7 @@ function sendNotification() {
       </div>
     </div>
 
-    <div class="section-card detail-card">
+    <div v-if="canOperateReview" class="section-card detail-card">
       <div class="panel-title">
         <div>
           <h3>标准逐项比对</h3>
@@ -774,6 +781,15 @@ function sendNotification() {
         </el-button>
         <span class="status-text">已通过文件会锁定结论；若存在外部异常项，请先完成每项人工复核结论再提交。</span>
       </div>
+    </div>
+
+    <div v-if="!canOperateReview" class="section-card detail-card">
+      <el-alert
+        type="warning"
+        :closable="false"
+        title="当前仅可处理分派给自己的审核记录。"
+        description="请返回审核列表确认当前任务是否已分派给你的账号，或切换到系统管理员账号处理全量审核任务。"
+      />
     </div>
   </div>
 
