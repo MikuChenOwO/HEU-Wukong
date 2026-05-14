@@ -346,6 +346,7 @@ const supplierRows = computed(() =>
         filesCount: records.length,
         approvedCount: records.filter((record) => record.status === 'approved').length,
         riskCount: riskRecords.length,
+        sameSourceCount: records.reduce((sum, record) => sum + (record.sameSourceMatches?.length || 0), 0),
         notifiedCount: notifications.length,
         backfillCount: backfillBatches.length,
       }
@@ -356,6 +357,20 @@ const currentSupplier = computed(() => suppliersStore.currentSupplier(currentSup
 const currentRecords = computed(() => reviewsStore.recordsBySupplier(currentSupplierId.value))
 const currentRiskRecords = computed(() => reviewsStore.riskRecordsBySupplier(currentSupplierId.value))
 const currentNotifications = computed(() => reviewsStore.notificationsBySupplier(currentSupplierId.value))
+const currentSameSourceMatches = computed(() =>
+  currentRecords.value
+    .flatMap((record) =>
+      (record.sameSourceMatches || []).map((item) => ({
+        ...item,
+        recordId: record.id,
+        recordNo: record.taskNo,
+        fileName: record.fileName,
+        recordStatus: record.status,
+        reviewedAt: record.reviewedAt || record.uploadedAt,
+      })),
+    )
+    .sort((a, b) => new Date(b.reviewedAt) - new Date(a.reviewedAt)),
+)
 const currentLifecycle = computed(() => currentSupplier.value?.lifecycle || {})
 const currentAdminUploads = computed(() =>
   currentRecords.value.filter((item) => item.uploadSource === 'admin').slice(0, 8),
@@ -668,6 +683,12 @@ function lifecycleLabel(value) {
 
 function documentTypeLabel(value) {
   return standardsStore.documentTypes.find((item) => item.value === value)?.label || value
+}
+
+function riskLevelTagType(value) {
+  if (value === '高') return 'danger'
+  if (value === '中') return 'warning'
+  return 'info'
 }
 
 function historyStatusLabel(value) {
@@ -1207,6 +1228,7 @@ function submitHistoryBackfill() {
           <el-table-column prop="filesCount" label="档案文件数" min-width="110" />
           <el-table-column prop="approvedCount" label="已通过数" min-width="110" />
           <el-table-column prop="riskCount" label="风险文件数" min-width="110" />
+          <el-table-column prop="sameSourceCount" label="同源命中" min-width="110" />
           <el-table-column prop="backfillCount" label="回填批次数" min-width="110" />
           <el-table-column label="档案来源" min-width="130">
             <template #default="{ row }">{{ archiveSourceLabel(row.lifecycle.archiveSource) }}</template>
@@ -1388,6 +1410,23 @@ function submitHistoryBackfill() {
           <div class="metric-row">
             <span>经营范围</span>
             <strong>{{ currentSupplier?.enterprise.businessScope || '--' }}</strong>
+          </div>
+          <div class="metric-row">
+            <span>关联主体</span>
+            <div class="capsule-list">
+              <span
+                v-for="party in currentSupplier?.relatedParties || []"
+                :key="`${party.name}-${party.relation}`"
+                class="capsule-item"
+              >
+                {{ party.name }} / {{ party.relation }}
+              </span>
+              <span v-if="!(currentSupplier?.relatedParties || []).length" class="status-text">暂无</span>
+            </div>
+          </div>
+          <div class="metric-row">
+            <span>同源命中</span>
+            <strong>{{ currentSameSourceMatches.length }} 条</strong>
           </div>
         </el-tab-pane>
 
@@ -1605,6 +1644,42 @@ function submitHistoryBackfill() {
         </el-tab-pane>
 
         <el-tab-pane label="风险与通知" name="risk">
+          <div class="section-card upload-card">
+            <div class="panel-title">
+              <div>
+                <h3>同源筛查结果</h3>
+                <p>按当前供应商档案和已上传材料汇总同源主体命中，方便核对关联企业和来源文件。</p>
+              </div>
+              <el-tag :type="currentSameSourceMatches.length ? 'warning' : 'success'">
+                {{ currentSameSourceMatches.length ? `${currentSameSourceMatches.length} 条命中` : '未命中' }}
+              </el-tag>
+            </div>
+            <el-table v-if="currentSameSourceMatches.length" :data="currentSameSourceMatches" class="app-table" stripe>
+              <el-table-column label="命中主体" min-width="160">
+                <template #default="{ row }">
+                  <strong>{{ row.person }}</strong>
+                  <span class="status-text"> / {{ row.relation }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="matchedCompany" label="关联供应商" min-width="240" />
+              <el-table-column label="风险等级" min-width="110">
+                <template #default="{ row }">
+                  <el-tag :type="riskLevelTagType(row.riskLevel)">{{ row.riskLevel || '低' }}风险</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="fileName" label="来源文件" min-width="220" />
+              <el-table-column label="审核状态" min-width="120">
+                <template #default="{ row }">
+                  <StatusTag :status="row.recordStatus" />
+                </template>
+              </el-table-column>
+              <el-table-column label="命中时间" min-width="160">
+                <template #default="{ row }">{{ formatDateTime(row.reviewedAt) }}</template>
+              </el-table-column>
+            </el-table>
+            <div v-else class="rich-empty">当前供应商暂未命中同源主体。</div>
+          </div>
+
           <el-table :data="currentRiskRecords" class="app-table" stripe>
             <el-table-column prop="fileName" label="文件名称" min-width="220" />
             <el-table-column label="风险状态" min-width="140">
